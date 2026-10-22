@@ -1,0 +1,354 @@
+
+<!DOCTYPE html>
+<head>
+<title>Smart Study Planner</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    * {
+        box-sizing: border-box;
+    }
+    body {
+        margin: 0;
+        padding: 25px 15px;
+        font-family: Arial, sans-serif;
+        background: #f0f4f8;
+        color: #1e293b;
+    }
+    .container {
+        max-width: 850px;
+        margin: auto;
+        background: white;
+        padding: 25px;
+        border-radius: 16px;
+        box-shadow: 0 5px 20px #00000012;
+    }
+    h1 {
+        text-align: center;
+        color: #2563eb;
+    }
+    .subtitle {
+        text-align: center;
+        color: #64748b;
+        margin-bottom: 25px;
+    }
+    label {
+        display: block;
+        margin: 15px 0 6px;
+        font-weight: bold;
+    }
+    input, select, button {
+        width: 100%;
+        padding: 11px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 15px;
+    }
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+    }
+    .subject {
+        margin-top: 15px;
+        padding: 15px;
+        background: #f8fafc;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+    }
+    button {
+        margin-top: 20px;
+        background: #2563eb;
+        color: white;
+        border: none;
+        font-weight: bold;
+        cursor: pointer;
+    }
+    button:hover {
+        background: #1d4ed8;
+    }
+    #results {
+        display: none;
+        margin-top: 30px;
+    }
+    .summary {
+        padding: 15px;
+        background: #eff6ff;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+    }
+    th, td {
+        padding: 12px 8px;
+        text-align: left;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    th {
+        background: #eff6ff;
+    }
+    .tips {
+        line-height: 1.8;
+        background: #f8fafc;
+        padding: 15px 30px;
+        border-radius: 10px;
+    }
+    .error {
+        color: #dc2626;
+        margin-top: 12px;
+    }
+    @media (max-width: 600px) {
+        .grid {
+            grid-template-columns: 1fr;
+        }
+        .container {
+            padding: 18px;
+        }
+        th, td {
+            font-size: 13px;
+        }
+    }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>📚 Smart Study Planner</h1>
+    <p class="subtitle">
+        Study smarter, manage your time, and reach your targets.
+    </p>
+    <form id="plannerForm">
+        <div class="grid">
+            <div>
+                <label for="count">Number of Subjects</label>
+                <input id="count" type="number" min="1" max="30"
+                       value="4" required>
+            </div>
+            <div>
+                <label for="minHours">Minimum Hours/Day</label>
+                <input id="minHours" type="number" min="0.5"
+                       max="24" step="0.5" value="2" required>
+            </div>
+            <div>
+                <label for="maxHours">Maximum Hours/Day</label>
+                <input id="maxHours" type="number" min="0.5"
+                       max="24" step="0.5" value="4" required>
+            </div>
+        </div>
+        <div id="subjects"></div>
+        <button type="button" id="prepareButton">
+            Enter Subject Details
+        </button>
+        <button type="submit">
+            Generate Smart Study Plan
+        </button>
+        <p id="error" class="error" role="alert"></p>
+    </form>
+    <section id="results">
+        <h2>Your Daily Study Plan</h2>
+        <div class="summary" id="summary"></div>
+        <div style="width:100%; min-height:280px;">
+            <canvas id="studyChart"></canvas>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Subject</th>
+                    <th>Priority</th>
+                    <th>Study Time</th>
+                </tr>
+            </thead>
+            <tbody id="planTable"></tbody>
+        </table>
+        <h3>Tips to Improve Results</h3>
+        <ul class="tips">
+            <li>Use active recall to test what you remember.</li>
+            <li>Solve practice questions instead of only rereading.</li>
+            <li>Take a 5–10 minute break after each 25–50 minute session.</li>
+            <li>Review difficult topics the next day.</li>
+            <li>Track your progress and adjust your plan weekly.</li>
+        </ul>
+    </section>
+</div>
+<script>
+const countInput = document.getElementById("count");
+const subjectsContainer = document.getElementById("subjects");
+const errorBox = document.getElementById("error");
+let studyChart = null;
+function showError(message) {
+    errorBox.textContent = message;
+}
+function buildSubjectFields() {
+    showError("");
+    const count = Number(countInput.value);
+    if (!Number.isInteger(count) || count < 1 || count > 30) {
+        showError("Enter a number of subjects between 1 and 30.");
+        return false;
+    }
+    const previous = Array.from(
+        subjectsContainer.querySelectorAll(".subject")
+    ).map(card => ({
+        name: card.querySelector(".subjectName").value,
+        difficulty: card.querySelector(".difficulty").value,
+        confidence: card.querySelector(".confidence").value
+    }));
+    subjectsContainer.innerHTML = "";
+    for (let i = 0; i < count; i++) {
+        const data = previous[i] || {
+            name: "",
+            difficulty: "2",
+            confidence: "2"
+        };
+        const card = document.createElement("div");
+        card.className = "subject";
+        const title = document.createElement("h3");
+        title.textContent = `Subject ${i + 1}`;
+        card.appendChild(title);
+        const nameLabel = document.createElement("label");
+        nameLabel.textContent = "Subject Name";
+        const name = document.createElement("input");
+        name.className = "subjectName";
+        name.placeholder = "e.g. Mathematics";
+        name.value = data.name;
+        name.required = true;
+        name.maxLength = 60;
+        name.setAttribute("aria-label", `Subject ${i + 1} name`);
+        nameLabel.appendChild(name);
+        card.appendChild(nameLabel);
+        const difficultyLabel = document.createElement("label");
+        difficultyLabel.textContent = "Difficulty";
+        const difficulty = document.createElement("select");
+        difficulty.className = "difficulty";
+        difficulty.innerHTML =
+            '<option value="1">Easy</option>' +
+            '<option value="2">Medium</option>' +
+            '<option value="3">Hard</option>';
+        difficulty.value = data.difficulty;
+        difficultyLabel.appendChild(difficulty);
+        card.appendChild(difficultyLabel);
+        const confidenceLabel = document.createElement("label");
+        confidenceLabel.textContent = "Current Understanding";
+        const confidence = document.createElement("select");
+        confidence.className = "confidence";
+        confidence.innerHTML =
+            '<option value="1">Weak</option>' +
+            '<option value="2">Average</option>' +
+            '<option value="3">Strong</option>';
+        confidence.value = data.confidence;
+        confidenceLabel.appendChild(confidence);
+        card.appendChild(confidenceLabel);
+        subjectsContainer.appendChild(card);
+    }
+    return true;
+}
+document.getElementById("prepareButton").addEventListener(
+    "click", buildSubjectFields
+);
+countInput.addEventListener("change", buildSubjectFields);
+document.getElementById("plannerForm").addEventListener(
+    "submit", function(event) {
+        event.preventDefault();
+        showError("");
+        if (subjectsContainer.children.length !== Number(countInput.value)) {
+            if (!buildSubjectFields()) return;
+            showError("Subject fields have been updated. Fill them in and generate your plan.");
+            return;
+        }
+        const minHours = Number(document.getElementById("minHours").value);
+        const maxHours = Number(document.getElementById("maxHours").value);
+        if (!Number.isFinite(minHours) || !Number.isFinite(maxHours) ||
+            minHours < 0.5 || maxHours > 24 || minHours > maxHours) {
+            showError("Enter valid hours: minimum must be at least 0.5, maximum at most 24, and minimum cannot exceed maximum.");
+            return;
+        }
+        const subjects = Array.from(
+            subjectsContainer.querySelectorAll(".subject")
+        ).map(card => ({
+            name: card.querySelector(".subjectName").value.trim(),
+            difficulty: Number(card.querySelector(".difficulty").value),
+            confidence: Number(card.querySelector(".confidence").value)
+        }));
+        if (subjects.some(s => !s.name)) {
+            showError("Please enter a name for every subject.");
+            return;
+        }
+        if (new Set(subjects.map(s => s.name.toLowerCase())).size !== subjects.length) {
+            showError("Please give each subject a unique name.");
+            return;
+        }
+        const target = (minHours + maxHours) / 2;
+        subjects.forEach(s => {
+            s.priority = s.difficulty + (4 - s.confidence);
+        });
+        const totalPriority = subjects.reduce(
+            (sum, s) => sum + s.priority, 0
+        );
+        subjects.forEach(s => {
+            s.hours = target * s.priority / totalPriority;
+        });
+        document.getElementById("summary").textContent =
+            `Daily target: ${target.toFixed(2)} hours | ` +
+            `Subjects: ${subjects.length} | ` +
+            `Total planned: ${subjects.reduce((sum, s) => sum + s.hours, 0).toFixed(2)} hours`;
+        const table = document.getElementById("planTable");
+        table.replaceChildren();
+        subjects.forEach(s => {
+            const row = document.createElement("tr");
+            const nameCell = document.createElement("td");
+            nameCell.textContent = s.name;
+            const priorityCell = document.createElement("td");
+            priorityCell.textContent = s.priority;
+            const timeCell = document.createElement("td");
+            const totalMinutes = Math.round(s.hours * 60);
+            timeCell.textContent =
+                `${Math.floor(totalMinutes / 60)} h ${totalMinutes % 60} min`;
+            row.append(nameCell, priorityCell, timeCell);
+            table.appendChild(row);
+        });
+        const ctx = document.getElementById("studyChart");
+        if (studyChart) studyChart.destroy();
+        studyChart = new Chart(ctx, {
+            type: "bar",
+            data: {
+                labels: subjects.map(s => s.name),
+                datasets: [{
+                    label: "Study Hours",
+                    data: subjects.map(s => Number(s.hours.toFixed(2))),
+                    backgroundColor: "#3b82f6",
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: context => `${context.parsed.y} hours`
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: "Hours per subject"
+                        }
+                    }
+                }
+            }
+        });
+        ctx.parentElement.style.height = "320px";
+        document.getElementById("results").style.display = "block";
+        document.getElementById("results").scrollIntoView({
+            behavior: "smooth"
+        });
+    }
+);
+buildSubjectFields();
+</script>
+</body>
+</html>
